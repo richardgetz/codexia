@@ -8,9 +8,10 @@ mod state;
 mod utils;
 
 use commands::{
-    approve_execution, check_codex_version, close_session, get_running_sessions,
-    load_sessions_from_disk, send_message, start_codex_session, stop_session, delete_session_file,
-    get_latest_session_id,
+    approve_execution, cancel_chatgpt_login, check_codex_version, close_session,
+    get_latest_session_id, get_repo_diff, get_running_sessions, get_status_text,
+    load_sessions_from_disk, send_message, start_chatgpt_login, start_codex_session,
+    stop_session, delete_session_file,
 };
 use config::{get_project_name, read_codex_config, read_mcp_servers, add_mcp_server, delete_mcp_server};
 use filesystem::{
@@ -49,7 +50,11 @@ pub fn run() {
             load_sessions_from_disk,
             delete_session_file,
             get_latest_session_id,
+            get_status_text,
+            get_repo_diff,
             check_codex_version,
+            start_chatgpt_login,
+            cancel_chatgpt_login,
             read_directory,
             get_default_directories,
             calculate_file_tokens,

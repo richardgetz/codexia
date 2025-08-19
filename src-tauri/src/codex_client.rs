@@ -1,5 +1,7 @@
 use anyhow::Result;
 use serde_json;
+use std::fs;
+use std::path::PathBuf;
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -21,7 +23,7 @@ pub struct CodexClient {
     process: Option<Child>,
     stdin_tx: Option<mpsc::UnboundedSender<String>>,
     #[allow(dead_code)]
-    config: CodexConfig,
+    pub(crate) config: CodexConfig,
 }
 
 impl CodexClient {
@@ -70,7 +72,42 @@ impl CodexClient {
         if !config.working_directory.is_empty() {
             cmd.current_dir(&config.working_directory);
         }
-        
+
+        // Point Codex to ~/.codex for auth/config (matches codex CLI default)
+        // and, if present, surface OPENAI_API_KEY from auth.json to the child.
+        // This allows users who logged in via `codex login` or edited auth.json
+        // to have the same credentials picked up by the spawned process.
+        if let Ok(home) = std::env::var("HOME") {
+            let mut codex_home = PathBuf::from(home);
+            codex_home.push(".codex");
+            cmd.env("CODEX_HOME", &codex_home);
+
+            // Try to read ~/.codex/auth.json and propagate OPENAI_API_KEY if set.
+            let auth_path = codex_home.join("auth.json");
+            if auth_path.exists() {
+                match fs::read_to_string(&auth_path) {
+                    Ok(contents) => {
+                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&contents) {
+                            if let Some(key) = json_val
+                                .get("OPENAI_API_KEY")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.is_empty())
+                            {
+                                cmd.env("OPENAI_API_KEY", key);
+                                log_to_file("Propagated OPENAI_API_KEY from ~/.codex/auth.json");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log_to_file(&format!(
+                            "Could not read ~/.codex/auth.json: {}",
+                            e
+                        ));
+                    }
+                }
+            }
+        }
+
         // Add custom arguments
         if let Some(custom_args) = &config.custom_args {
             for arg in custom_args {
@@ -145,6 +182,10 @@ impl CodexClient {
         };
 
         Ok(client)
+    }
+
+    pub fn config(&self) -> CodexConfig {
+        self.config.clone()
     }
 
 

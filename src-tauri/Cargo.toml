@@ -38,3 +38,6 @@ toml = "0.9.5"
 tauri-plugin-fs = "2"
 walkdir = "2.3"
 chrono = { version = "0.4", features = ["serde"] }
+# for parsing JWT payloads in status
+base64 = "0.22"
+# We spawn `codex login` rather than linking the login crate directly

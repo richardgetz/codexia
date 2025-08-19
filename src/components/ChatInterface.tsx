@@ -139,6 +139,53 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       return;
     }
 
+    // Slash command handling (intercept before sending to model)
+    const trimmed = messageContent.trim();
+    if (trimmed.startsWith('/')) {
+      const [cmd, ...rest] = trimmed.slice(1).split(/\s+/);
+      if (cmd === 'status') {
+        try {
+          const text = await invoke<string>('get_status_text', { sessionId: activeSessionId });
+          addMessage(activeSessionId, {
+            id: `${activeSessionId}-status-${Date.now()}`,
+            role: 'system',
+            content: text,
+            timestamp: Date.now(),
+          });
+        } catch (e: any) {
+          addMessage(activeSessionId, {
+            id: `${activeSessionId}-status-error-${Date.now()}`,
+            role: 'system',
+            content: `Error: ${e}`,
+            timestamp: Date.now(),
+          });
+        }
+        setInputValue('');
+        return;
+      }
+      if (cmd === 'diff') {
+        try {
+          const diffText = await invoke<string>('get_repo_diff', { workingDirectory: config.workingDirectory });
+          addMessage(activeSessionId, {
+            id: `${activeSessionId}-diff-${Date.now()}`,
+            role: 'system',
+            content: diffText,
+            timestamp: Date.now(),
+          });
+        } catch (e: any) {
+          addMessage(activeSessionId, {
+            id: `${activeSessionId}-diff-error-${Date.now()}`,
+            role: 'system',
+            content: `Error: ${e}`,
+            timestamp: Date.now(),
+          });
+        }
+        setInputValue('');
+        return;
+      }
+      // Unhandled slash commands fall through to normal send
+    }
+
     let actualSessionId = sessionId;
 
     // Handle pending new conversation, temporary sessionId, or empty sessionId

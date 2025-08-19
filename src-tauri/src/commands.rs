@@ -1,5 +1,5 @@
 use crate::protocol::CodexConfig;
-use crate::services::{codex, session};
+use crate::services::{auth, codex, session, slash};
 use crate::state::CodexState;
 use tauri::{AppHandle, State};
 
@@ -61,6 +61,16 @@ pub async fn check_codex_version() -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn start_chatgpt_login(app: AppHandle, state: State<'_, CodexState>) -> Result<String, String> {
+    auth::start_chatgpt_login(app, state).await
+}
+
+#[tauri::command]
+pub async fn cancel_chatgpt_login(state: State<'_, CodexState>) -> Result<(), String> {
+    auth::cancel_chatgpt_login(state).await
+}
+
+#[tauri::command]
 pub async fn delete_session_file(file_path: String) -> Result<(), String> {
     session::delete_session_file(file_path).await
 }
@@ -68,4 +78,14 @@ pub async fn delete_session_file(file_path: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_latest_session_id() -> Result<Option<String>, String> {
     session::get_latest_session_id().await
+}
+
+#[tauri::command]
+pub async fn get_status_text(state: State<'_, CodexState>, session_id: String) -> Result<String, String> {
+    slash::get_status_text(state, session_id).await
+}
+
+#[tauri::command]
+pub async fn get_repo_diff(working_directory: String) -> Result<String, String> {
+    slash::get_repo_diff(working_directory).await
 }

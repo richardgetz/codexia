@@ -1,9 +1,11 @@
 // app/settings/page.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Provider, useSettingsStore } from "@/stores/SettingsStore";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export default function SettingsPage() {
   const {
@@ -17,6 +19,34 @@ export default function SettingsPage() {
   const [newModelName, setNewModelName] = useState("");
   const [editingModelIdx, setEditingModelIdx] = useState<number | null>(null);
   const [editingModelValue, setEditingModelValue] = useState("");
+  const [authStatus, setAuthStatus] = useState<
+    "idle" | "starting" | "waiting" | "success" | "error"
+  >("idle");
+  const [authUrl, setAuthUrl] = useState<string>("");
+  const [authError, setAuthError] = useState<string>("");
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+    (async () => {
+      try {
+        const un1 = await listen<{ url: string }>("auth-login-url", (e) => {
+          if (e.payload?.url) setAuthUrl(e.payload.url);
+        });
+        const un2 = await listen("auth-login-complete", () => {
+          setAuthStatus("success");
+        });
+        const un3 = await listen<{ error: string }>("auth-login-error", (e) => {
+          setAuthStatus("error");
+          setAuthError(e.payload?.error || "Login error");
+        });
+        unsubs.push(() => un1());
+        unsubs.push(() => un2());
+        unsubs.push(() => un3());
+      } catch {}
+    })();
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, []);
   const providerNames = [
     "OpenAI",
     "Gemini",
@@ -88,6 +118,74 @@ export default function SettingsPage() {
                     placeholder={`Enter API key for ${selectedProvider}`}
                   />
                 </div>
+                {selectedProvider === "OpenAI" && (
+                  <div className="mb-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          try {
+                            setAuthStatus("starting");
+                            setAuthError("");
+                            setAuthUrl("");
+                            // Start login; URL will be emitted via event
+                            await invoke<string>("start_chatgpt_login");
+                            setAuthStatus("waiting");
+                          } catch (e: any) {
+                            setAuthStatus("error");
+                            setAuthError(String(e));
+                          }
+                        }}
+                      >
+                        Auth with ChatGPT
+                      </Button>
+                      {authStatus === "waiting" && (
+                        <Button
+                          variant="destructive"
+                          onClick={async () => {
+                            try {
+                              await invoke("cancel_chatgpt_login");
+                              setAuthStatus("idle");
+                              setAuthUrl("");
+                            } catch (e: any) {
+                              setAuthError(String(e));
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                    {authStatus === "waiting" && (
+                      <div className="text-sm text-muted-foreground">
+                        Waiting for login to complete...
+                      </div>
+                    )}
+                    {authUrl && (
+                      <div className="text-sm">
+                        If your browser did not open, open this URL:
+                        <div className="mt-1">
+                          <a
+                            className="text-blue-600 underline break-all"
+                            href={authUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {authUrl}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {authStatus === "success" && (
+                      <div className="text-sm text-green-600">
+                        Login complete. You can now use OpenAI models.
+                      </div>
+                    )}
+                    {authStatus === "error" && authError && (
+                      <div className="text-sm text-red-600">{authError}</div>
+                    )}
+                  </div>
+                )}
                 <div className="mb-4">
                   <label className="block mb-1 font-medium">Base URL</label>
                   <Input
@@ -217,3 +315,6 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+// Event subscriptions
+//
